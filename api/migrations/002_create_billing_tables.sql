@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS customers (
     name                TEXT,
     stripe_customer_id  TEXT,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (tenant_id, email)
 );
 
 CREATE TABLE IF NOT EXISTS subscriptions (
@@ -42,3 +43,25 @@ CREATE INDEX IF NOT EXISTS idx_customers_tenant_id ON customers(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_tenant_id ON subscriptions(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription_id ON subscriptions(stripe_subscription_id);
+
+-- Prevent cross-tenant FK references: customer and plan must belong to the same tenant as the subscription
+CREATE OR REPLACE FUNCTION check_subscription_tenant_consistency()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM customers WHERE id = NEW.customer_id AND tenant_id = NEW.tenant_id
+    ) THEN
+        RAISE EXCEPTION 'customer_id % does not belong to tenant %', NEW.customer_id, NEW.tenant_id;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM subscription_plans WHERE id = NEW.plan_id AND tenant_id = NEW.tenant_id
+    ) THEN
+        RAISE EXCEPTION 'plan_id % does not belong to tenant %', NEW.plan_id, NEW.tenant_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_subscription_tenant_check
+    BEFORE INSERT OR UPDATE ON subscriptions
+    FOR EACH ROW EXECUTE FUNCTION check_subscription_tenant_consistency();
