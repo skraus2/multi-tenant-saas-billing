@@ -15,5 +15,6 @@ reporting/.venv/
 reporting/__pycache__/
 reporting/**/__pycache__/
 reporting/*.egg-info/
+reporting/**/*.egg-info/
 reporting/.mypy_cache/
 reporting/.ruff_cache/
