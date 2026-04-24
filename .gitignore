@@ -6,7 +6,6 @@ api/tmp/
 
 # Rust
 billing-engine/target/
-billing-engine/Cargo.lock
 
 dashboard/node_modules/
 dashboard/dist/

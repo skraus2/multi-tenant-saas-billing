@@ -17,6 +17,7 @@ dev = [
     "pytest>=9.0",
     "ruff>=0.15",
     "mypy>=1.20",
+    "pip-tools>=7.0",
 ]
 
 [tool.ruff]
