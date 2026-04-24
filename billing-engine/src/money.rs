@@ -1,5 +1,8 @@
+use rust_decimal::prelude::{RoundingStrategy, ToPrimitive};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+
+use crate::error::AppError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Currency {
@@ -28,7 +31,15 @@ pub struct Money {
 
 impl Money {
     /// Creates a `Money` value from a decimal amount.
-    pub fn new(amount: Decimal, currency: Currency) -> Self {
+    ///
+    /// # Note
+    /// This is `pub(crate)` intentionally. External callers must use `from_cents`
+    /// which is bounded by `i64`, ensuring `to_cents()` cannot overflow.
+    /// Using arbitrary `Decimal` values may produce `AppError::Overflow` in `to_cents()`.
+    ///
+    /// Used in tests and by `proration.rs` (not yet implemented).
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn new(amount: Decimal, currency: Currency) -> Self {
         Self { amount, currency }
     }
 
@@ -41,12 +52,20 @@ impl Money {
     }
 
     /// Returns the amount as integer cents (e.g. 9.99 → 999).
-    pub fn to_cents(&self) -> i64 {
+    ///
+    /// Uses `ROUND_HALF_UP` (e.g. 0.5 → 1, 1.5 → 2) — the standard for
+    /// financial calculations in most jurisdictions.
+    ///
+    /// # Errors
+    /// Returns `BillingError::Overflow` if the amount exceeds `i64` range
+    /// (approximately ±92 trillion cents / ±920 billion USD). This should
+    /// never occur with amounts created via `from_cents`, but can occur if
+    /// `Money::new` is called with an extreme `Decimal` value.
+    pub fn to_cents(&self) -> Result<i64, AppError> {
         (self.amount * dec!(100))
-            .round_dp(0)
-            .to_string()
-            .parse::<i64>()
-            .unwrap_or(0)
+            .round_dp_with_strategy(0, RoundingStrategy::MidpointAwayFromZero)
+            .to_i64()
+            .ok_or(AppError::Overflow)
     }
 }
 
@@ -85,26 +104,73 @@ mod tests {
     fn to_cents_roundtrip() {
         let cents = 2900i64;
         let m = Money::from_cents(cents, Currency::EUR);
-        assert_eq!(m.to_cents(), cents);
+        assert_eq!(m.to_cents().unwrap(), cents);
     }
 
     #[test]
     fn to_cents_negative_roundtrip() {
         let cents = -500i64;
         let m = Money::from_cents(cents, Currency::EUR);
-        assert_eq!(m.to_cents(), cents);
+        assert_eq!(m.to_cents().unwrap(), cents);
     }
 
     #[test]
-    fn to_cents_rounds_correctly() {
-        // 9.995 should round to 1000 cents
+    fn to_cents_rounds_half_up() {
+        // 9.995 → 999.5 cents → rounds to 1000 (ROUND_HALF_UP)
         let m = Money::new(dec!(9.995), Currency::EUR);
-        assert_eq!(m.to_cents(), 1000);
+        assert_eq!(m.to_cents().unwrap(), 1000);
+    }
+
+    #[test]
+    fn to_cents_rounds_half_up_even_base() {
+        // 10.005 → 1000.5 cents → rounds to 1001 (ROUND_HALF_UP, not Banker's)
+        let m = Money::new(dec!(10.005), Currency::EUR);
+        assert_eq!(m.to_cents().unwrap(), 1001);
+    }
+
+    #[test]
+    fn to_cents_overflow_returns_error() {
+        // Actual overflow boundary: to_cents() multiplies by 100 internally,
+        // so the safe ceiling is i64::MAX/100. Test at i64::MAX/100 + 1.
+        let just_over = Decimal::from(i64::MAX / 100) + Decimal::ONE;
+        let m = Money::new(just_over, Currency::EUR);
+        assert!(m.to_cents().is_err());
     }
 
     #[test]
     fn display_formats_correctly() {
         let m = Money::from_cents(999, Currency::EUR);
         assert_eq!(m.to_string(), "9.99 EUR");
+    }
+
+    // Property-based tests — invariants that must hold for all inputs
+    mod proptest_suite {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// `from_cents(x).to_cents() == x` for all practical financial amounts.
+            /// Range bounded to ±i64::MAX/100 to avoid overflow when multiplying by 100
+            /// inside `to_cents`. Covers ±92 trillion cents (≈ ±920 billion USD).
+            #[test]
+            fn from_cents_to_cents_roundtrip(cents in i64::MIN/100..=i64::MAX/100) {
+                let m = Money::from_cents(cents, Currency::EUR);
+                prop_assert_eq!(m.to_cents().unwrap(), cents);
+            }
+
+            /// Currency is preserved through from_cents (no mutation).
+            #[test]
+            fn currency_preserved(cents in -1_000_000_00i64..=1_000_000_00i64) {
+                let m = Money::from_cents(cents, Currency::USD);
+                prop_assert_eq!(m.currency, Currency::USD);
+            }
+
+            /// Amount is never negative for non-negative cent inputs.
+            #[test]
+            fn non_negative_cents_produce_non_negative_amount(cents in 0i64..=i64::MAX/100) {
+                let m = Money::from_cents(cents, Currency::EUR);
+                prop_assert!(m.amount >= rust_decimal::Decimal::ZERO);
+            }
+        }
     }
 }
