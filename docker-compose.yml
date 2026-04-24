@@ -26,6 +26,7 @@ services:
       - go_mod_cache:/go/pkg/mod
     environment:
       DATABASE_APP_URL: postgresql://billing_app:${POSTGRES_APP_PASSWORD}@db:5432/${POSTGRES_DB:-billing_dev}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
       GO_ENV: ${GO_ENV:-development}

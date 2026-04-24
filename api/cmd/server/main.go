@@ -29,6 +29,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if len(jwtSecret) < 32 {
+		slog.Error("JWT_SECRET must be at least 32 bytes")
+		os.Exit(1)
+	}
+
 	pool, err := db.New(context.Background(), appDSN)
 	if err != nil {
 		// Do not log err directly — may contain DSN with credentials
@@ -45,7 +51,15 @@ func main() {
 	r.Use(middleware.CleanPath)
 	r.Use(apimiddleware.NewRequestLogger())
 
+	// Public routes (no auth)
 	r.Get("/health", handler.NewHealth(pool))
+
+	// Protected routes — all behind JWT + tenant middleware
+	r.Group(func(r chi.Router) {
+		r.Use(apimiddleware.NewAuth([]byte(jwtSecret)))
+		r.Use(apimiddleware.NewTenant(pool))
+		// future handlers go here
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {
