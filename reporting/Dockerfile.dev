@@ -1,0 +1,12 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+COPY pyproject.toml ./
+RUN pip install -e ".[dev]" --no-cache-dir
+
+COPY . .
+
+EXPOSE 8081
+# Reporting is a batch job service — no web server needed yet.
+# Container stays alive for running jobs interactively via docker exec.
+CMD ["python", "-m", "http.server", "8081"]

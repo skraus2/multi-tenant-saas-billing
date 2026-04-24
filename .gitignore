@@ -1,0 +1,19 @@
+# Secrets
+.env
+
+# Go
+api/tmp/
+
+# Rust
+billing-engine/target/
+billing-engine/Cargo.lock
+
+dashboard/node_modules/
+dashboard/dist/
+
+reporting/.venv/
+reporting/__pycache__/
+reporting/**/__pycache__/
+reporting/*.egg-info/
+reporting/.mypy_cache/
+reporting/.ruff_cache/
