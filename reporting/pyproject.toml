@@ -7,16 +7,16 @@ name = "reporting"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
-    "pydantic>=2.0",
+    "pydantic>=2.13",
     "psycopg2-binary>=2.9",
     "hypothesis>=6.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "ruff>=0.5",
-    "mypy>=1.10",
+    "pytest>=9.0",
+    "ruff>=0.15",
+    "mypy>=1.20",
 ]
 
 [tool.ruff]
