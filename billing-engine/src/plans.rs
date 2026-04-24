@@ -8,7 +8,16 @@ pub enum BillingInterval {
 }
 
 impl BillingInterval {
-    /// Returns the number of days in this billing period (approximate for yearly).
+    /// Returns an **approximate** number of days in this billing interval.
+    ///
+    /// # ⚠️ Do NOT use for proration calculations
+    /// These are fixed constants (30 / 365) and do not reflect the actual
+    /// calendar days in a given billing period. For proration, derive
+    /// `days_in_period` from `current_period_start` and `current_period_end`
+    /// timestamps provided by Stripe — otherwise Stripe's proration will
+    /// diverge from ours for months with 28, 29, or 31 days.
+    ///
+    /// Safe uses: UI hints, rough estimates, plan descriptions.
     pub fn days_in_period(&self) -> u32 {
         match self {
             BillingInterval::Monthly => 30,

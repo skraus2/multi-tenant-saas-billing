@@ -2,7 +2,7 @@ use rust_decimal::prelude::{RoundingStrategy, ToPrimitive};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
-use crate::error::BillingError;
+use crate::error::AppError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Currency {
@@ -31,7 +31,15 @@ pub struct Money {
 
 impl Money {
     /// Creates a `Money` value from a decimal amount.
-    pub fn new(amount: Decimal, currency: Currency) -> Self {
+    ///
+    /// # Note
+    /// This is `pub(crate)` intentionally. External callers must use `from_cents`
+    /// which is bounded by `i64`, ensuring `to_cents()` cannot overflow.
+    /// Using arbitrary `Decimal` values may produce `AppError::Overflow` in `to_cents()`.
+    ///
+    /// Used in tests and by `proration.rs` (not yet implemented).
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn new(amount: Decimal, currency: Currency) -> Self {
         Self { amount, currency }
     }
 
@@ -53,11 +61,11 @@ impl Money {
     /// (approximately ±92 trillion cents / ±920 billion USD). This should
     /// never occur with amounts created via `from_cents`, but can occur if
     /// `Money::new` is called with an extreme `Decimal` value.
-    pub fn to_cents(&self) -> Result<i64, BillingError> {
+    pub fn to_cents(&self) -> Result<i64, AppError> {
         (self.amount * dec!(100))
             .round_dp_with_strategy(0, RoundingStrategy::MidpointAwayFromZero)
             .to_i64()
-            .ok_or(BillingError::Overflow)
+            .ok_or(AppError::Overflow)
     }
 }
 
@@ -122,9 +130,10 @@ mod tests {
 
     #[test]
     fn to_cents_overflow_returns_error() {
-        // Amount far exceeds i64 range → must return Err, not silent 0
-        let huge = Decimal::from(i64::MAX) + Decimal::ONE;
-        let m = Money::new(huge, Currency::EUR);
+        // Actual overflow boundary: to_cents() multiplies by 100 internally,
+        // so the safe ceiling is i64::MAX/100. Test at i64::MAX/100 + 1.
+        let just_over = Decimal::from(i64::MAX / 100) + Decimal::ONE;
+        let m = Money::new(just_over, Currency::EUR);
         assert!(m.to_cents().is_err());
     }
 
