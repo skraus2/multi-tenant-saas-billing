@@ -3,3 +3,10 @@ billing-engine/Cargo.lock
 
 dashboard/node_modules/
 dashboard/dist/
+
+reporting/.venv/
+reporting/__pycache__/
+reporting/**/__pycache__/
+reporting/*.egg-info/
+reporting/.mypy_cache/
+reporting/.ruff_cache/
