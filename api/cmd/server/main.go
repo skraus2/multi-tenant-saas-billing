@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"billing-platform/api/internal/db"
 	"billing-platform/api/internal/handler"
 )
 
@@ -19,16 +20,37 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
+	// Connect as billing_app (non-superuser) — required for RLS to take effect
+	appDSN := os.Getenv("DATABASE_APP_URL")
+	if appDSN == "" {
+		slog.Error("DATABASE_APP_URL not set")
+		os.Exit(1)
+	}
+
+	pool, err := db.New(context.Background(), appDSN)
+	if err != nil {
+		// Do not log err directly — may contain DSN with credentials
+		slog.Error("failed to connect to database — check DATABASE_APP_URL")
+		os.Exit(1)
+	}
+	defer pool.Close()
+	slog.Info("database connected", "role", "billing_app")
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.CleanPath)
 
-	r.Get("/health", handler.Health)
+	r.Get("/health", handler.NewHealth(pool))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	srv := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":" + port,
 		Handler:      r,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
