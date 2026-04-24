@@ -1,3 +1,7 @@
+# Secrets
+.env
+
+# Rust
 billing-engine/target/
 billing-engine/Cargo.lock
 
