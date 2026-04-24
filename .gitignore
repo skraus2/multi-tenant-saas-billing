@@ -1,6 +1,9 @@
 # Secrets
 .env
 
+# Go
+api/tmp/
+
 # Rust
 billing-engine/target/
 billing-engine/Cargo.lock
