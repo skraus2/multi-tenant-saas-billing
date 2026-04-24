@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"billing-platform/api/internal/db"
 	"billing-platform/api/internal/handler"
+	apimiddleware "billing-platform/api/internal/middleware"
 )
 
 func main() {
@@ -41,6 +43,7 @@ func main() {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.CleanPath)
+	r.Use(apimiddleware.NewRequestLogger())
 
 	r.Get("/health", handler.NewHealth(pool))
 
@@ -60,7 +63,7 @@ func main() {
 	// Start server in background
 	go func() {
 		slog.Info("server starting", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server error", "error", err)
 			os.Exit(1)
 		}
